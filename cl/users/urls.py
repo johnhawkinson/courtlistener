@@ -1,11 +1,11 @@
-from cl.lib.AuthenticationBackend import ConfirmedEmailAuthenticationForm
-from cl.users.forms import (
-    CustomPasswordResetForm, CustomSetPasswordForm,
-)
-from cl.users import views
 from django.conf.urls import url
 from django.contrib.auth import views as auth_views
 
+from cl.lib.AuthenticationBackend import ConfirmedEmailAuthenticationForm
+from cl.users import views
+from cl.users.forms import (
+    CustomPasswordResetForm, CustomSetPasswordForm,
+)
 
 urlpatterns = [
     # Sign in/out and password pages
@@ -72,8 +72,14 @@ urlpatterns = [
         views.view_settings,
         name='view_settings'
     ),
-    url(r'^profile/favorites/$', views.view_favorites, name='profile_favorites'),
-    url(r'^profile/alerts/$', views.view_alerts, name='profile_alerts'),
+    url(
+        r'^profile/favorites/$',
+        views.view_favorites,
+        name='profile_favorites'),
+    url(
+        r'^profile/alerts/$',
+        views.view_alerts,
+        name='profile_alerts'),
     url(
         r'^profile/visualizations/$',
         views.view_visualizations,
@@ -96,12 +102,23 @@ urlpatterns = [
     ),
     url(
         r'^profile/delete/$',
-        views.delete_account
+        views.delete_account,
+        name="delete_account",
     ),
     url(
         r'^profile/delete/done/$',
         views.delete_profile_done,
         name='delete_profile_done',
+    ),
+    url(
+        r'^profile/take-out/$',
+        views.take_out,
+        name="take_out",
+    ),
+    url(
+        r'^profile/take-out/done/$',
+        views.take_out_done,
+        name="take_out_done"
     ),
     url(
         r'^register/$',

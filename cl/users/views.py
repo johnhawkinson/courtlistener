@@ -3,6 +3,7 @@ import logging
 import random
 import re
 from datetime import timedelta
+from email.utils import parseaddr
 
 from django.conf import settings
 from django.contrib import messages
@@ -15,6 +16,7 @@ from django.core.urlresolvers import reverse
 from django.db.models import Count
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
+from django.template.defaultfilters import urlencode
 from django.utils.timezone import now
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import (sensitive_post_parameters,
@@ -26,7 +28,7 @@ from cl.lib import search_utils
 from cl.stats.utils import tally_stat
 from cl.users.forms import (
     ProfileForm, UserForm, UserCreationFormExtended, EmailConfirmationForm,
-    CustomPasswordChangeForm
+    CustomPasswordChangeForm, OptInConsentForm,
 )
 from cl.users.models import UserProfile
 from cl.users.utils import convert_to_stub_account, emails, message_dict
@@ -185,14 +187,14 @@ def view_settings(request):
 def delete_account(request):
     if request.method == 'POST':
         try:
+            email = emails['account_deleted']
+            send_mail(email['subject'], email['body'] % request.user,
+                      email['from'], email['to'])
             request.user.alerts.all().delete()
             request.user.favorites.all().delete()
             request.user.scotus_maps.all().update(deleted=True)
             convert_to_stub_account(request.user)
             logout(request)
-            email = emails['account_deleted']
-            send_mail(email['subject'], email['body'] % request.user,
-                      email['from'], email['to'])
 
         except Exception as e:
             logger.critical("User was unable to delete account. %s" % e)
@@ -208,6 +210,28 @@ def delete_account(request):
 
 def delete_profile_done(request):
     return render(request, 'profile/deleted.html', {'private': True})
+
+
+@login_required
+def take_out(request):
+    if request.method == 'POST':
+        email = emails['take_out_requested']
+        send_mail(
+            email['subject'],
+            email['body'] % (request.user, request.user.email),
+            email['from'],
+            email['to'],
+        )
+
+        return HttpResponseRedirect(reverse('take_out_done'))
+
+    return render(request, 'profile/take_out.html', {
+        'private': True
+    })
+
+
+def take_out_done(request):
+    return render(request, 'profile/take_out_done.html', {'private': True})
 
 
 @sensitive_post_parameters('password1', 'password2')
@@ -252,7 +276,8 @@ def register(request):
             else:
                 form = UserCreationFormExtended(request.POST)
 
-            if form.is_valid():
+            consent_form = OptInConsentForm(request.POST)
+            if form.is_valid() and consent_form.is_valid():
                 cd = form.cleaned_data
                 if not stub_account:
                     # make a new user that is active, but has not confirmed
@@ -302,12 +327,16 @@ def register(request):
                     email['to'],
                 )
                 tally_stat('user.created')
+                get_str = '?next=%s&email=%s' % (urlencode(redirect_to),
+                                                 urlencode(user.email))
                 return HttpResponseRedirect(reverse('register_success') +
-                                            '?next=%s' % redirect_to)
+                                            get_str)
         else:
             form = UserCreationFormExtended()
+            consent_form = OptInConsentForm()
         return render(request, "register/register.html", {
             'form': form,
+            'consent_form': consent_form,
             'private': False
         })
     else:
@@ -321,8 +350,12 @@ def register_success(request):
     """Tell the user they have been registered and allow them to continue where
     they left off."""
     redirect_to = request.GET.get('next', '')
+    email = request.GET.get('email', '')
+    default_from = parseaddr(settings.DEFAULT_FROM_EMAIL)[1]
     return render(request, 'register/registration_complete.html', {
         'redirect_to': redirect_to,
+        'email': email,
+        'default_from': default_from,
         'private': True,
     })
 

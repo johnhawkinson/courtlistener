@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load text_filters %}
 {% load humanize %}
+{% load tz %}
 
 
 {% block sidebar %}{% endblock %}
@@ -30,7 +31,7 @@
         {% if perms.search.change_docket %}
             <p class="float-right">
                 <a href="{% url 'admin:search_docket_change' docket.id %}"
-                   class="btn btn-primary btn-xs">Edit&nbsp;Docket&nbsp;<i
+                   class="btn btn-primary btn-xs">Edit&nbsp;Docket&nbsp;({{ docket.view_count }} views)&nbsp;<i
                         class="fa fa-pencil"></i>
                 </a>
                 {% if request.user.is_superuser %}
@@ -48,7 +49,7 @@
             </p>
         {% endif %}
         <i id="favorites-star"
-           class="{% if favorite_form.instance.docket_id %}gold fa-star{% else %}gray fa-star-o bold{% endif %} pointer fa inline"
+           class="{% if favorite_form.instance.docket_id %}gold fa-star{% else %}gray fa-star-o bold{% endif %} pointer fa inline hidden-print"
            data-toggle="modal"
            data-target="#modal-save-favorite, #modal-logged-out"
            title="{% if favorite_form.instance.docket_id %}Edit this favorite{% else %}Save this as a favorite in your profile{% endif %}"></i>
@@ -61,20 +62,30 @@
         </h2>
         {% include "includes/favorites_modal.html" %}
 
+        <h3>{{ docket.court }}</h3>
+
         {% if docket.source in docket.RECAP_SOURCES %}
-            <p>
+            <p class="v-offset-above-1">
                 {% if docket.pacer_url %}
                     <a href="{{ docket.pacer_url }}"
-                       class="btn btn-primary btn-xs"
+                       class="btn btn-primary"
                        target="_blank">View on PACER</a>
                 {% endif %}
                 <a href="/?type=r&amp;q=docket_id%3A{{ docket.pk }}"
-                   class="btn btn-primary btn-xs">Search this Docket</a>
+                   class="btn btn-success"><i class="fa fa-search"></i>&nbsp;Search this Docket</a>
             </p>
         {% endif %}
 
-        <h3>{{ docket.court }}</h3>
-
+        {% if docket.source in docket.RECAP_SOURCES %}
+            <p class="bottom">
+                <span class="meta-data-header">Last updated:</span>
+                <span class="meta-data-value cursor-help dotted"
+                      data-toggle="tooltip"
+                      data-placement="right"
+                      data-html="true"
+                      title="This docket was collected as part of the RECAP Project. Therefore, it is updated when users of the RECAP Extension download the docket from PACER. To see the most up to date version of this docket, click the button above to &quot;View on PACER.&quot;">{{ docket.date_modified|timezone:timezone }}</span>
+            </p>
+        {% endif %}
 
         {% if docket.assigned_to or docket.assigned_to_str %}
             <p class="bottom">

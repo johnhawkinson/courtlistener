@@ -1,8 +1,11 @@
 # coding=utf-8
 import json
+import logging
 import os
+import re
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.mail import EmailMessage
 from django.core.urlresolvers import reverse
 from django.db.models import Count, Sum
@@ -16,12 +19,13 @@ from rest_framework.status import HTTP_429_TOO_MANY_REQUESTS
 from cl.audio.models import Audio
 from cl.custom_filters.decorators import check_honeypot
 from cl.lib import magic
-from cl.lib.bot_detector import is_bot
+from cl.lib.decorators import track_in_piwik
 from cl.people_db.models import Person
 from cl.search.forms import SearchForm
 from cl.search.models import Court, OpinionCluster, Opinion, RECAPDocument
 from cl.simple_pages.forms import ContactForm
-from cl.stats.utils import tally_stat
+
+logger = logging.getLogger(__name__)
 
 
 def about(request):
@@ -31,19 +35,24 @@ def about(request):
 
 def faq(request):
     """Loads the FAQ page"""
-    template_data = {
-        'scraped_court_count': Court.objects.filter(
-            in_use=True,
-            has_opinion_scraper=True
-        ).count(),
-        'total_opinion_count': OpinionCluster.objects.all().count(),
-        'total_recap_count': RECAPDocument.objects.filter(
-            is_available=True).count(),
-        'total_oa_minutes': (Audio.objects.aggregate(
-            Sum('duration')
-        )['duration__sum'] or 0) / 60,
-        'total_judge_count': Person.objects.all().count(),
-    }
+    faq_cache_key = 'faq-stats'
+    template_data = cache.get(faq_cache_key)
+    if template_data is None:
+        template_data = {
+            'scraped_court_count': Court.objects.filter(
+                in_use=True,
+                has_opinion_scraper=True
+            ).count(),
+            'total_opinion_count': OpinionCluster.objects.all().count(),
+            'total_recap_count': RECAPDocument.objects.filter(
+                is_available=True).count(),
+            'total_oa_minutes': (Audio.objects.aggregate(
+                Sum('duration')
+            )['duration__sum'] or 0) / 60,
+            'total_judge_count': Person.objects.all().count(),
+        }
+        five_days = 60 * 60 * 24 * 5
+        cache.set(faq_cache_key, template_data, five_days)
 
     return contact(
         request,
@@ -53,8 +62,12 @@ def faq(request):
     )
 
 
+def alert_help(request):
+    return render(request, 'help/alert_help.html', {'private': False})
+
+
 def markdown_help(request):
-    return render(request, 'markdown_help.html', {'private': False})
+    return render(request, 'help/markdown_help.html', {'private': False})
 
 
 def build_court_dicts(courts):
@@ -70,42 +83,54 @@ def build_court_dicts(courts):
 
 
 def coverage_graph(request):
-    courts = Court.objects.filter(in_use=True)
-    courts_json = json.dumps(build_court_dicts(courts))
+    coverage_cache_key = 'coverage-data-v2'
+    coverage_data = cache.get(coverage_cache_key)
+    if coverage_data is None:
+        courts = Court.objects.filter(in_use=True)
+        courts_json = json.dumps(build_court_dicts(courts))
 
-    search_form = SearchForm(request.GET)
-    precedential_statuses = [field for field in
-        search_form.fields.keys() if field.startswith('stat_')]
+        search_form = SearchForm(request.GET)
+        precedential_statuses = [field for field in
+            search_form.fields.keys() if field.startswith('stat_')]
 
-    # Build up the sourcing stats.
-    counts = OpinionCluster.objects.values('source').annotate(Count('source'))
-    count_pro = 0
-    count_lawbox = 0
-    count_scraper = 0
-    for d in counts:
-        if 'R' in d['source']:
-            count_pro += d['source__count']
-        if 'C' in d['source']:
-            count_scraper += d['source__count']
-        if 'L' in d['source']:
-            count_lawbox += d['source__count']
+        # Build up the sourcing stats.
+        counts = OpinionCluster.objects.values('source').annotate(Count('source'))
+        count_pro = 0
+        count_lawbox = 0
+        count_scraper = 0
+        for d in counts:
+            if 'R' in d['source']:
+                count_pro += d['source__count']
+            if 'C' in d['source']:
+                count_scraper += d['source__count']
+            if 'L' in d['source']:
+                count_lawbox += d['source__count']
 
-    opinion_courts = Court.objects.filter(
-        in_use=True,
-        has_opinion_scraper=True)
-    oral_argument_courts = Court.objects.filter(
-        in_use=True,
-        has_oral_argument_scraper=True)
-    return render(request, 'coverage_graph.html', {
-        'sorted_courts': courts_json,
-        'precedential_statuses': precedential_statuses,
-        'count_pro': count_pro,
-        'count_lawbox': count_lawbox,
-        'count_scraper': count_scraper,
-        'courts_with_opinion_scrapers': opinion_courts,
-        'courts_with_oral_argument_scrapers': oral_argument_courts,
-        'private': False
-    })
+        opinion_courts = Court.objects.filter(
+            in_use=True,
+            has_opinion_scraper=True)
+        oral_argument_courts = Court.objects.filter(
+            in_use=True,
+            has_oral_argument_scraper=True)
+
+        oa_duration = Audio.objects.aggregate(
+            Sum('duration'))['duration__sum'] / 60
+
+        coverage_data = {
+            'sorted_courts': courts_json,
+            'precedential_statuses': precedential_statuses,
+            'oa_duration': oa_duration,
+            'count_pro': count_pro,
+            'count_lawbox': count_lawbox,
+            'count_scraper': count_scraper,
+            'courts_with_opinion_scrapers': opinion_courts,
+            'courts_with_oral_argument_scrapers': oral_argument_courts,
+            'private': False
+        }
+        one_day = 60 * 60 * 24
+        cache.set(coverage_cache_key, coverage_data, one_day)
+
+    return render(request, 'coverage_graph.html', coverage_data)
 
 
 def feeds(request):
@@ -140,6 +165,9 @@ def contact(
     """This is a fairly run-of-the-mill contact form, except that it can be
     overridden in various ways so that its logic can be called from other
     functions.
+
+    We also use a field called phone_number in place of the subject field to
+    defeat spam.
     """
     if template_data is None:
         template_data = {}
@@ -150,18 +178,24 @@ def contact(
         form = ContactForm(request.POST)
         if form.is_valid():
             cd = form.cleaned_data
+            # Uses phone_number as Subject field to defeat spam. If this field
+            # begins with three digits, assume it's spam; fake success.
+            if re.match('\d{3}', cd['phone_number']):
+                logger.info("Detected spam message. Not sending email.")
+                return HttpResponseRedirect(reverse(u'contact_thanks'))
+
             default_from = settings.DEFAULT_FROM_EMAIL
             EmailMessage(
-                subject=u'[CourtListener] Contact form message: '
-                        u'{subject}'.format(**cd),
-                body=u'Subject: {subject}\n'
+                subject=u'[CourtListener] Contact: '
+                        u'{phone_number}'.format(**cd),
+                body=u'Subject: {phone_number}\n'
                      u'From: {name} ({email})\n'
-                     u'Browser: {browser}\n'
-                     u'Message: \n\n{message}'.format(
-                        browser=request.META.get(u'HTTP_USER_AGENT', u"Unknown"),
-                        **cd
+                     u'\n\n{message}\n\n'
+                     u'Browser: {browser}'.format(
+                         browser=request.META.get(u'HTTP_USER_AGENT', u"Unknown"),
+                         **cd
                      ),
-                to=[m[1] for m in settings.MANAGERS],
+                to=['info@free.law'],
                 reply_to=[cd.get(u'email', default_from) or default_from],
             ).send()
             return HttpResponseRedirect(reverse(u'contact_thanks'))
@@ -251,6 +285,7 @@ def ratelimited(request, exception):
                   status=HTTP_429_TOO_MANY_REQUESTS)
 
 
+@track_in_piwik
 def serve_static_file(request, file_path=''):
     """Sends a static file to a user.
 
@@ -292,6 +327,4 @@ def serve_static_file(request, file_path=''):
     response['Content-Disposition'] = 'inline; filename="%s"' % \
                                       file_name.encode('utf-8')
     response['Content-Type'] = mimetype
-    if not is_bot(request):
-        tally_stat('case_page.static_file.served')
     return response

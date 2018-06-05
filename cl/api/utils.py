@@ -12,6 +12,7 @@ from django.contrib.humanize.templatetags.humanize import intcomma, ordinal
 from django.core.mail import send_mail
 from django.utils.encoding import force_text
 from django.utils.timezone import now
+from rest_framework import serializers
 from rest_framework.metadata import SimpleMetadata
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import DjangoModelPermissions
@@ -31,6 +32,13 @@ INTEGER_LOOKUPS = ['exact', 'gte', 'gt', 'lte', 'lt', 'range']
 BASIC_TEXT_LOOKUPS = ['exact', 'iexact', 'startswith', 'istartswith',
                       'endswith', 'iendswith']
 ALL_TEXT_LOOKUPS = BASIC_TEXT_LOOKUPS + ['contains', 'icontains']
+
+
+class HyperlinkedModelSerializerWithId(serializers.HyperlinkedModelSerializer):
+    """Extend the HyperlinkedModelSerializer to add IDs as well for the best of
+    both worlds.
+    """
+    id = serializers.ReadOnlyField()
 
 
 class DisabledHTMLFilterBackend(DjangoFilterBackend):
@@ -272,9 +280,9 @@ class BulkJsonHistory(object):
 
     """
 
-    def __init__(self, obj_type_str):
+    def __init__(self, obj_type_str, bulk_dir):
         self.obj_type_str = obj_type_str
-        self.path = os.path.join(settings.BULK_DATA_DIR, 'tmp', obj_type_str,
+        self.path = os.path.join(bulk_dir, 'tmp', obj_type_str,
                                  'info.json')
         self.json = self.load_json_file()
         super(BulkJsonHistory, self).__init__()

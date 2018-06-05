@@ -98,10 +98,21 @@ header {
     text-transform: none;
 }
 
+.dotted {
+    text-decoration: dotted underline gray;
+}
+
+.flex {
+    display: flex;
+}
+
 a.button:active{
   background-color:#6299c5;
 /* border:1px solid #6299c5; */
   color:#fff;
+}
+.shadow {
+    box-shadow: 2px 2px 5px #000000;
 }
 
 #main-query-box {
@@ -554,6 +565,10 @@ input.court-checkbox, input.status-checkbox {
 #docket-entry-table .row {
     padding-top: 8px;
     border-bottom: 1px solid #dddddd;
+}
+#docket-entry-table .recap-documents.row {
+    padding-top: 0px;
+    border-bottom: none;
 }
 .representation {
     margin-top: 8.5px;

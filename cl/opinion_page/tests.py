@@ -75,6 +75,25 @@ class CitationRedirectorTest(TestCase):
         self.assertStatus(r, HTTP_404_NOT_FOUND)
 
 
+class ViewRecapDocketTest(TestCase):
+    fixtures = ['test_objects_search.json', 'judge_judy.json']
+
+    def test_regular_docket_url(self):
+        """Can we load a regular docket sheet?"""
+        r = self.client.get(reverse('view_docket', args=[1, 'case-name']))
+        self.assertEqual(r.status_code, HTTP_200_OK)
+
+    def test_recap_docket_url(self):
+        """Can we redirect to a regular docket URL from a recap/uscourts.*
+        URL?
+        """
+        r = self.client.get(reverse('redirect_docket_recap', kwargs={
+            'court': 'test',
+            'pacer_case_id': '666666',
+        }), follow=True)
+        self.assertEqual(r.redirect_chain[0][1], HTTP_302_FOUND)
+
+
 @override_settings(
     SOLR_OPINION_URL=settings.SOLR_OPINION_TEST_URL,
     SOLR_AUDIO_URL=settings.SOLR_AUDIO_TEST_URL,

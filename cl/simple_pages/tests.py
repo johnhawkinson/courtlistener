@@ -1,4 +1,6 @@
 # coding=utf-8
+from __future__ import print_function
+
 import datetime
 import os
 
@@ -6,7 +8,7 @@ from django.conf import settings
 from django.core import mail
 from django.core.urlresolvers import reverse
 from django.http import HttpRequest
-from django.test import TestCase, RequestFactory
+from django.test import TestCase
 from django.test.utils import override_settings
 from lxml.html import fromstring
 
@@ -19,7 +21,7 @@ class ContactTest(TestCase):
     fixtures = ['authtest_data.json']
     test_msg = {
         'name': "pandora",
-        'subject': "asdf",
+        'phone_number': "asdf",
         'message': '123456789012345678901',
         'email': 'pandora@box.com',
         'skip_me_if_alive': "",
@@ -68,12 +70,31 @@ class ContactTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(mail.outbox), 1)
 
+    def test_spam_message_is_rejected(self):
+        """Do we reject it if people put a phone number in the phone_number
+        field?
+
+        We should! The phone_number field is labeled as the Subject field in the
+        UI. Anything putting a phone number in here is a bot to be rejected.
+        """
+        msg = self.test_msg.copy()
+        msg['phone_number'] = '909-576-4123'
+        response = self.client.post(reverse('contact'), msg)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(mail.outbox), 0)
+
+        # Number in middle of subject is OK!
+        msg['phone_number'] = 'asdf 909 asdf'
+        response = self.client.post(reverse('contact'), msg)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(mail.outbox), 1)
+
 
 class SimplePagesTest(TestCase):
 
     def check_for_title(self, content):
         """Make sure a page has a valid HTML title"""
-        print "Checking for HTML title tag....",
+        print("Checking for HTML title tag....", end='')
         html_tree = fromstring(content)
         title = html_tree.xpath('//title/text()')
         self.assertGreater(
@@ -87,7 +108,7 @@ class SimplePagesTest(TestCase):
             msg="The text in this title tag is empty.",
         )
 
-        print "✓"
+        print("✓")
 
     def test_simple_pages(self):
         """Do all the simple pages load properly?"""
@@ -99,6 +120,7 @@ class SimplePagesTest(TestCase):
             {'viewname': 'contribute'},
             {'viewname': 'contact'},
             {'viewname': 'contact_thanks'},
+            {'viewname': 'alert_help'},
             {'viewname': 'markdown_help'},
             {'viewname': 'advanced_search'},
             {'viewname': 'old_terms', 'args': ['1']},
@@ -111,7 +133,7 @@ class SimplePagesTest(TestCase):
         ]
         for reverse_param in reverse_params:
             path = reverse(**reverse_param)
-            print "Testing basic load of: {path}...".format(path=path),
+            print("Testing basic load of: {path}...".format(path=path), end='')
             r = self.client.get(path)
             self.assertEqual(
                 r.status_code,
@@ -124,7 +146,7 @@ class SimplePagesTest(TestCase):
                         code=r.status_code,
                     )
             )
-            print '✓'
+            print('✓')
             is_html = ('text/html' in r['content-type'])
             if r['content-type'] and is_html:
                 self.check_for_title(r.content)
@@ -181,14 +203,14 @@ class StaticFilesTest(TestCase):
         response = serve_static_file(request, file_path=self.good_mp3_path)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'audio/mpeg')
-        self.assertIn('attachment;', response['Content-Disposition'])
+        self.assertIn('inline;', response['Content-Disposition'])
 
     def test_serve_static_file_serves_txt(self):
         request = HttpRequest()
         response = serve_static_file(request, file_path=self.good_txt_path)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/plain')
-        self.assertIn('attachment;', response['Content-Disposition'])
+        self.assertIn('inline;', response['Content-Disposition'])
         self.assertIn(
             'FOR THE DISTRICT OF COLUMBIA CIRCUIT',
             response.content
@@ -199,4 +221,4 @@ class StaticFilesTest(TestCase):
         response = serve_static_file(request, file_path=self.good_pdf_path)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/pdf')
-        self.assertIn('attachment;', response['Content-Disposition'])
+        self.assertIn('inline;', response['Content-Disposition'])

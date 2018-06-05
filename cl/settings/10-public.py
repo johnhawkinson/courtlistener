@@ -1,8 +1,8 @@
 import datetime
+import os
 import re
 import sys
 
-import os
 from django.contrib.messages import constants as message_constants
 from judge_pics import judge_root
 
@@ -28,6 +28,7 @@ USE_I18N = False
 DEFAULT_CHARSET = 'utf-8'
 LANGUAGE_CODE = 'en-us'
 USE_TZ = True
+DATETIME_FORMAT = 'N j, Y, P e'
 
 TEMPLATES = [{
     'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -98,6 +99,7 @@ INSTALLED_APPS = [
     'cl.lib',
     'cl.opinion_page',
     'cl.recap',
+    'cl.recap_rss',
     'cl.scrapers',
     'cl.search',
     'cl.simple_pages',
@@ -365,6 +367,13 @@ MARKDOWN_DEUX_STYLES = {
         ],
     },
 }
+
+
+#########
+# PIWIK #
+#########
+PIWIK_URL = 'https://piwik.courtlistener.com/piwik.php'
+PIWIK_SITE_ID = '1'
 
 
 ########

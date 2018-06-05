@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load extras %}
 
-{% block title %}REST API, v3.1 &ndash; CourtListener.com{% endblock %}
+{% block title %}REST API, v3.2 &ndash; CourtListener.com{% endblock %}
 {% block description %}
     REST API for federal and state opinions, PACER data, the searchable RECAP Archive, and oral argument recordings. Provided by Free Law Project, a 501(c)(3) non-profit. Please donate to support this service.
 {% endblock %}
@@ -17,7 +17,7 @@
 
 {% block content %}
     <div class="col-sm-7">
-        <h1 id="about">REST API &ndash; V3.1</h1>
+        <h1 id="about">REST API &ndash; V3.2</h1>
 
         <p>For developers that wish to have a granular API for our data, we provide a RESTful API based on the <a href="http://www.django-rest-framework.org/" target="_blank">Django REST Framework</a>.
         </p>
@@ -34,6 +34,9 @@
 
         <p>Note that when you press the button in your browser, you got an HTML result, but when you run <code>curl</code> you got a JSON object. This is deliberate and is
             <a href="#formats">discussed in more depth below</a>.
+        </p>
+
+        <p class="alert alert-warning"><i class="fa fa-warning"></i> <strong>Watch out!</strong> Something else that's curious just happened. You didn't authenticate to the API. This is deliberate to encourage experimentation, but the biggest gotcha people run into is that they forget to enable authentication before deploying their code. Don't let this be you! Remember to add <a href="#authentication">authentication</a>.
         </p>
         <p>The endpoints listed in this response can be used in combination to make sophisticated queries against our database or our search engine. To learn more about an endpoint, you can send an <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS">OPTIONS</a> request to it, like so:
         </p>
@@ -145,6 +148,7 @@
         <p>Using curl, this looks like:</p>
         <pre class="scrollable">curl {% get_full_host %}{% url "opinioncluster-list" version="v3" %} --header 'Authorization: Token {% if user.is_authenticated %}{{ user.auth_token }}{% else %}&lt;your-token-here&gt;{% endif %}'</pre>
         <p>Note that quotes are used to enclose the whitespace in the header.</p>
+        <p class="alert alert-warning"><i class="fa fa-warning"></i> <strong>Careful!</strong> The most common mistake we see is forgetting the word "Token" in the token authentication header value. Remember that the header name is <code>Authentication</code> and the value is <code>Token&nbsp;{% if user.is_authenticated %}{{ user.auth_token }}{% else %}&lt;your-token-here&gt;{% endif %}</code></p>
         {% if user.is_authenticated %}
             <p>Your permanent token for use with this API is being used in the examples above, is at the top of this page, and is:</p>
             <pre class="scrollable">{{ user.auth_token }}</pre>
@@ -177,7 +181,7 @@
         </p>
         <p>If you wish to set the <code>Accept</code> header using cURL, you can do so using the <code>--header</code> flag:
         </p>
-        <pre class="scrollable">curl --header "Accept: application/xml"{% get_full_host %}{% url "opinioncluster-list" version="v3" %}</pre>
+        <pre class="scrollable">curl --header "Accept: application/xml" {% get_full_host %}{% url "opinioncluster-list" version="v3" %}</pre>
         <p>All data is serialized using the utf-8 charset.</p>
 
 
@@ -648,10 +652,14 @@ PACER_TO_CL_IDS = {
             <li><p><code>debug</code> <em>(optional)</em>: While you are developing, use this field to test your work. When it is set to <code>true</code>, your uploads will not make changes to the RECAP Archive, but you will create processing requests which will be processed in debug mode.
             </p></li>
         </ul>
-        <p>The following three upload types are supported:</p>
+        <p>The following four upload types are supported:</p>
         <ul>
             <li>
                 <p><code>Dockets</code>: Uploading a docket should be fairly easy. In addition to the required fields above, supply the <code>pacer_case_id</code> field.
+                </p>
+            </li>
+            <li>
+                <p><code>Docket history reports</code>: Upload these similar to how you upload Dockets.
                 </p>
             </li>
             <li>
@@ -666,9 +674,10 @@ PACER_TO_CL_IDS = {
             </li>
         </ul>
         <p>The following upload types are works in progress:</p>
-	<ul><li><code>DOCKET_HISTORY_REPORT</code></li>
-	    <li><code>APPELLATE_DOCKET</code></li>
-	    <li><code>APPELLATE_ATTACHMENT_PAGE</code></li></ul>
+        <ul>
+            <li><code>APPELLATE_DOCKET</code></li>
+            <li><code>APPELLATE_ATTACHMENT_PAGE</code></li>
+        </ul>
         <p>When you complete your upload, you will create a <code>Processing Queue</code> object in the CourtListener database. This object will be returned in the HTTP response to your upload so you will know its ID. This object will contain the fields you uploaded, and the following fields will be populated as the item is processed:
         </p>
         <ul>

@@ -2,8 +2,9 @@ from django.conf.urls import url
 
 from cl.opinion_page.sitemap import opinion_sitemap_maker, recap_sitemap_maker
 from cl.opinion_page.views import (
-    view_opinion, view_authorities, view_docket, cluster_visualizations,
-    citation_redirector, view_recap_document, block_item, view_parties,
+    block_item, cluster_visualizations, view_opinion, citation_redirector,
+    redirect_docket_recap, view_authorities, view_docket, view_parties,
+    view_recap_document,
 )
 
 urlpatterns = [
@@ -28,6 +29,13 @@ urlpatterns = [
         name="view_docket"
     ),
     url(
+        r'^recap/gov.uscourts'
+        r'\.(?P<court>[^\./]+)'
+        r'\.(?P<pacer_case_id>[^\./]+)/?$',
+        redirect_docket_recap,
+        name="redirect_docket_recap",
+    ),
+    url(
         r'^docket/(?P<docket_id>\d*)/parties/(?P<slug>[^/]*)/$',
         view_parties,
         name="docket_parties",
@@ -38,7 +46,10 @@ urlpatterns = [
         name='view_recap_document',
     ),
     url(
-        r'^docket/(?P<docket_id>\d*)/(?P<doc_num>\d*)/(?P<att_num>\d*)/(?P<slug>[^/]*)/$',
+        r'^docket/(?P<docket_id>\d*)/'
+        r'(?P<doc_num>\d*)/'
+        r'(?P<att_num>\d*)/'
+        r'(?P<slug>[^/]*)/$',
         view_recap_document,
         name='view_recap_attachment',
     ),

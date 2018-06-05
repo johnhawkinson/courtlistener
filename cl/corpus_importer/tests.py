@@ -1,5 +1,6 @@
 # coding=utf-8
 import os
+from datetime import date
 
 from django.conf import settings
 from django.test import TestCase
@@ -10,10 +11,12 @@ from cl.corpus_importer.import_columbia.parse_opinions import \
     get_state_court_object
 from cl.corpus_importer.lawbox.judge_extractor import get_judge_from_str, \
     REASONS
-from cl.lib.pacer import PacerXMLParser, lookup_and_save
+from cl.lib.pacer import process_docket_data
 from cl.people_db.import_judges.populate_fjc_judges import get_fed_court_object
 from cl.people_db.models import Attorney, AttorneyOrganization, Party
-from cl.search.models import Docket
+from cl.recap.tasks import find_docket_object
+from cl.recap.models import UPLOAD_TYPE
+from cl.search.models import Docket, RECAPDocument
 
 
 class JudgeExtractionTest(TestCase):
@@ -31,7 +34,8 @@ class JudgeExtractionTest(TestCase):
              (None, REASONS[10])),
             ('MR. JUSTICE CLARK delivered the opinion of the Court.',
              (u'Clark', REASONS[5])),
-            ('Justice THEIS delivered the judgment of the court, with opinion.',
+            ('Justice THEIS delivered the judgment of the court, '
+             'with opinion.',
              (u'Theis', REASONS[5])),
             ('Kennedy, J., announced the judgment of the Court and delivered '
              'the opinion of the Court, except...',
@@ -150,7 +154,8 @@ class JudgeExtractionTest(TestCase):
             ('("DGCL") SEEKING judge Advancement of Reasonable Attorney\'s '
              'Fees',
              (None, REASONS[3])),
-            ('"DGCL") SEEKING judge Advancement of Reasonable Attorney\'s Fees',
+            ('"DGCL") SEEKING judge Advancement of Reasonable Attorney\'s '
+             'Fees',
              (None, REASONS[3])),
             (':"DGCL") SEEKING judge Advancement of Reasonable Attorney\'s '
              'Fees',
@@ -163,7 +168,7 @@ class JudgeExtractionTest(TestCase):
              (None, REASONS[3])),
             ('{"DGCL") SEEKING judge Advancement of Reasonable Attorney\'s '
              'Fees',
-            (None, REASONS[3])),
+             (None, REASONS[3])),
             ('}"DGCL") SEEKING judge Advancement of Reasonable Attorney\'s '
              'Fees',
              (None, REASONS[3])),
@@ -230,78 +235,81 @@ class CourtMatchingTest(TestCase):
         pairs = (
             {
                 'args': (
-                    "California Superior Court  Appellate Division, Kern County.",
-                    'california/supreme_court_opinions/documents/0dc538c63bd07a28.xml',
+                    "California Superior Court  "
+                    "Appellate Division, Kern County.",
+                    'california/supreme_court_opinions/documents/0dc538c63bd07a28.xml',  # noqa
                 ),
                 'answer': 'calappdeptsuperct'
             },
             {
                 'args': (
-                    "California Superior Court  Appellate Department, Sacramento.",
-                    'california/supreme_court_opinions/documents/0dc538c63bd07a28.xml',
+                    "California Superior Court  "
+                    "Appellate Department, Sacramento.",
+                    'california/supreme_court_opinions/documents/0dc538c63bd07a28.xml',  # noqa
                 ),
                 'answer': 'calappdeptsuperct'
             },
             {
                 'args': (
                     "Appellate Session of the Superior Court",
-                    'connecticut/appellate_court_opinions/documents/0412a06c60a7c2a2.xml',
+                    'connecticut/appellate_court_opinions/documents/0412a06c60a7c2a2.xml',  # noqa
                 ),
                 'answer': 'connsuperct'
             },
             {
                 'args': (
                     "Court of Errors and Appeals.",
-                    'new_jersey/supreme_court_opinions/documents/0032e55e607f4525.xml',
+                    'new_jersey/supreme_court_opinions/documents/0032e55e607f4525.xml',  # noqa
                 ),
                 'answer': 'nj'
             },
             {
                 'args': (
                     "Court of Chancery",
-                    'new_jersey/supreme_court_opinions/documents/0032e55e607f4525.xml',
+                    'new_jersey/supreme_court_opinions/documents/0032e55e607f4525.xml',  # noqa
                 ),
                 'answer': 'njch'
             },
             {
                 'args': (
                     "Workers' Compensation Commission",
-                    'connecticut/workers_compensation_commission/documents/0902142af68ef9df.xml',
+                    'connecticut/workers_compensation_commission/documents/0902142af68ef9df.xml',  # noqa
                 ),
                 'answer': 'connworkcompcom',
             },
             {
                 'args': (
                     'Appellate Session of the Superior Court',
-                    'connecticut/appellate_court_opinions/documents/00ea30ce0e26a5fd.xml'
+                    'connecticut/appellate_court_opinions/documents/00ea30ce0e26a5fd.xml'  # noqa
                 ),
                 'answer': 'connsuperct',
             },
             {
                 'args': (
                     'Superior Court  New Haven County',
-                    'connecticut/superior_court_opinions/documents/0218655b78d2135b.xml'
+                    'connecticut/superior_court_opinions/documents/0218655b78d2135b.xml'  # noqa
                 ),
                 'answer': 'connsuperct',
             },
             {
                 'args': (
                     'Superior Court, Hartford County',
-                    'connecticut/superior_court_opinions/documents/0218655b78d2135b.xml'
+                    'connecticut/superior_court_opinions/documents/0218655b78d2135b.xml'  # noqa
                 ),
                 'answer': 'connsuperct',
             },
             {
                 'args': (
-                    "Compensation Review Board  WORKERS' COMPENSATION COMMISSION",
-                    'connecticut/workers_compensation_commission/documents/00397336451f6659.xml',
+                    "Compensation Review Board  "
+                    "WORKERS' COMPENSATION COMMISSION",
+                    'connecticut/workers_compensation_commission/documents/00397336451f6659.xml',  # noqa
                 ),
                 'answer': 'connworkcompcom',
             },
             {
                 'args': (
                     'Appellate Division Of The Circuit Court',
-                    'connecticut/superior_court_opinions/documents/03dd9ec415bf5bf4.xml',
+                    'connecticut/superior_court_opinions/documents/03dd9ec415bf5bf4.xml',  # noqa
                 ),
                 'answer': 'connsuperct',
             },
@@ -314,7 +322,8 @@ class CourtMatchingTest(TestCase):
             },
             {
                 'args': (
-                    'Courts of General Sessions and Oyer and Terminer of Delaware',
+                    'Courts of General Sessions and Oyer and Terminer '
+                    'of Delaware',
                     'delaware/court_opinions/documents/108da18f9278da90.xml',
                 ),
                 'answer': 'delsuperct',
@@ -335,7 +344,8 @@ class CourtMatchingTest(TestCase):
             },
             {
                 'args': (
-                    'Court of Quarter Sessions Court of Delaware,  Kent County.',
+                    'Court of Quarter Sessions '
+                    'Court of Delaware,  Kent County.',
                     'delaware/court_opinions/documents/f01f1724cc350bb9.xml',
                 ),
                 'answer': 'delsuperct',
@@ -378,14 +388,14 @@ class CourtMatchingTest(TestCase):
             {
                 'args': (
                     'District Court of Appeal of Florida, Second District.',
-                    '/data/dumps/florida/court_opinions/documents/25ce1e2a128df7ff.xml',
+                    '/data/dumps/florida/court_opinions/documents/25ce1e2a128df7ff.xml',  # noqa
                 ),
                 'answer': 'fladistctapp',
             },
             {
                 'args': (
                     'U.S. Circuit Court',
-                    'north_carolina/court_opinions/documents/fa5b96d590ae8d48.xml',
+                    'north_carolina/court_opinions/documents/fa5b96d590ae8d48.xml',  # noqa
                 ),
                 'answer': 'circtnc',
             },
@@ -465,12 +475,19 @@ class PacerDocketParserTest(TestCase):
     NUM_PARTIES = 3
     NUM_PETRO_ATTYS = 6
     NUM_FLOYD_ROLES = 3
+    NUM_DOCKET_ENTRIES = 123
     DOCKET_PATH = os.path.join(settings.MEDIA_ROOT, 'test', 'xml',
                                'gov.uscourts.akd.41664.docket.xml')
 
     def setUp(self):
-        self.pacer_doc = PacerXMLParser(self.DOCKET_PATH)
-        self.docket = lookup_and_save(self.pacer_doc, debug=False)
+
+        self.docket, count = find_docket_object('akd', '41664',
+                                                '3:11-cv-00064')
+        if count > 1:
+            raise Exception("Should not get more than one docket during "
+                            "this test!")
+        process_docket_data(self.docket, self.DOCKET_PATH,
+                            UPLOAD_TYPE.IA_XML_FILE)
 
     def tearDown(self):
         Docket.objects.all().delete()
@@ -478,10 +495,38 @@ class PacerDocketParserTest(TestCase):
         Attorney.objects.all().delete()
         AttorneyOrganization.objects.all().delete()
 
+    def test_docket_entry_parsing(self):
+        """Do we get the docket entries we expected?"""
+        # Total count is good?
+        all_rds = RECAPDocument.objects.all()
+        self.assertEqual(self.NUM_DOCKET_ENTRIES, all_rds.count())
+
+        # Main docs exist and look about right?
+        rd = RECAPDocument.objects.get(pacer_doc_id='0230856334')
+        desc = rd.docket_entry.description
+        good_de_desc = all([
+            desc.startswith("COMPLAINT"),
+            'Filing fee' in desc,
+            desc.endswith("2011)"),
+        ])
+        self.assertTrue(good_de_desc)
+
+        # Attachments have good data?
+        att_rd = RECAPDocument.objects.get(pacer_doc_id='02301132632')
+        self.assertTrue(all([
+            att_rd.description.startswith('Judgment'),
+            "redistributed" in att_rd.description,
+            att_rd.description.endswith("added"),
+        ]), "Description didn't match. Got: %s" % att_rd.description)
+        self.assertEqual(att_rd.attachment_number, 1)
+        self.assertEqual(att_rd.document_number, '116')
+        self.assertEqual(att_rd.docket_entry.date_filed, date(2012, 12, 10))
+
+        # Two documents under the docket entry?
+        self.assertEqual(att_rd.docket_entry.recap_documents.all().count(), 2)
+
     def test_party_parsing(self):
         """Can we parse an XML docket and get good results in the DB"""
-        self.pacer_doc.make_parties(self.docket, debug=False)
-
         self.assertEqual(self.docket.parties.all().count(), self.NUM_PARTIES)
 
         petro = self.docket.parties.get(name__contains="Petro")

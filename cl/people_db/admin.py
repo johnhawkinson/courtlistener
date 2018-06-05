@@ -2,11 +2,15 @@ from django.conf import settings
 from django.contrib import admin
 
 from cl.lib.admin import CSSAdminMixin
+# Judge DB imports
 from cl.people_db.models import (
-    Education, School, Person, Position, RetentionEvent, Race,
-    PoliticalAffiliation, Source, ABARating, PartyType,
-    Party, Role, Attorney, AttorneyOrganization,
-    AttorneyOrganizationAssociation
+    ABARating, Education, Person, PoliticalAffiliation, Position,
+    Race, RetentionEvent, School, Source, FinancialDisclosure,
+)
+# RECAP imports
+from cl.people_db.models import (
+    Attorney, AttorneyOrganization, AttorneyOrganizationAssociation,
+    CriminalComplaint, CriminalCount, PartyType, Party, Role,
 )
 
 
@@ -94,6 +98,18 @@ class ABARatingInline(admin.TabularInline):
     extra = 1
 
 
+@admin.register(FinancialDisclosure)
+class FinancialDisclosureAdmin(admin.ModelAdmin):
+    raw_id_fields = (
+        'person',
+    )
+
+    def save_model(self, request, obj, form, change):
+        obj.save()
+        from cl.people_db.tasks import make_png_thumbnail_from_pdf
+        make_png_thumbnail_from_pdf.delay(obj.pk)
+
+
 @admin.register(Person)
 class PersonAdmin(admin.ModelAdmin, CSSAdminMixin):
     prepopulated_fields = {"slug": ['name_first', 'name_middle', 'name_last',
@@ -158,6 +174,20 @@ class PartyTypeAdmin(admin.ModelAdmin):
     )
 
 
+@admin.register(CriminalComplaint)
+class CriminalComplaintAdmin(admin.ModelAdmin):
+    raw_id_fields = (
+        'party_type',
+    )
+
+
+@admin.register(CriminalCount)
+class CriminalCountAdmin(admin.ModelAdmin):
+    raw_id_fields = (
+        'party_type',
+    )
+
+
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
     raw_id_fields = (
@@ -210,6 +240,7 @@ class AttorneyOrganizationAdmin(admin.ModelAdmin):
         'city',
         'zip_code',
     )
+
 
 admin.site.register(PoliticalAffiliation)
 admin.site.register(RetentionEvent)
